@@ -65,7 +65,7 @@ ReadQWI (const gchar  *name,
 	FILE              *fd;
 	gint32             image_ID = -1;
 	QWI_ELEMENT        element;
-	guchar             lowres;
+	guchar             lowres = 0;
 	gshort              elements;
 	gint32             layer;
 	guint16			   width;
@@ -75,7 +75,7 @@ ReadQWI (const gchar  *name,
 	gshort            *data[4] = {NULL, NULL, NULL, NULL};
 	guchar            *dest;
 	gint               cur_progress, max_progress;
-	GimpImageBaseType  base_type;
+	GimpImageBaseType  base_type = GIMP_RGB;
 	GimpImageType      image_type;
 	GimpImageType      layers_type;
 	GimpPixelRgn       pixel_rgn;
@@ -222,6 +222,42 @@ ReadQWI (const gchar  *name,
 	cur_progress = 0;
 	max_progress = element.file.elements;
 
+	if ((element.file.width < 0) || (element.file.width > GIMP_MAX_IMAGE_SIZE))
+	{
+		g_message ("Unsupported or invalid image width: %d", element.width);
+		image_ID = -1;
+		goto out;
+	}
+
+	if ((element.file.height < 0) || (element.file.height > GIMP_MAX_IMAGE_SIZE))
+	{
+		g_message ("Unsupported or invalid image height: %d", element.height);
+		image_ID = -1;
+		goto out;
+	}
+	if (image_width)
+		*image_width = element.file.width;
+	if (image_height)
+		*image_height = element.file.height;
+	while (thumb && lowres < element.toplayer && (CEIL_RSHIFT(element.file.width, lowres) > thumb || CEIL_RSHIFT(element.file.height, lowres) > thumb))
+		lowres++;
+	width = CEIL_RSHIFT(element.file.width, lowres);
+	height = CEIL_RSHIFT(element.file.height, lowres);
+	image_ID = gimp_image_new (width, height, base_type);
+	gimp_image_set_filename (image_ID, filename);
+
+  if (code_length) {
+    if (code_parasite)
+      gimp_parasite_free (code_parasite);
+
+    code_parasite = gimp_parasite_new ("code", GIMP_PARASITE_PERSISTENT, code_length + 1, code);
+    g_free(code);
+    gimp_image_attach_parasite (image_ID, code_parasite);
+
+    gimp_parasite_free (code_parasite);
+    code_parasite = NULL;
+  }
+
   // Let's process each element in the file (in case of a thumbnail request, just do it for the first element)
 	for (elements = 0; elements < element.file.elements && (!elements || !thumb); elements++)
 	{
@@ -261,22 +297,18 @@ ReadQWI (const gchar  *name,
 		switch (element.planes)
 		{
 		case 4 :
-			base_type = GIMP_RGB;
 			image_type = GIMP_RGBA_IMAGE;
 			layers_type = GIMP_RGBA_IMAGE;
 			break;
 		case 3:
-			base_type = GIMP_RGB;
 			image_type = GIMP_RGB_IMAGE;
 			layers_type = GIMP_RGB_IMAGE;
 			break;
 		case 2:
-			base_type = GIMP_GRAY;
 			image_type = GIMP_GRAYA_IMAGE;
 			layers_type = GIMP_GRAYA_IMAGE;
 			break;
 		case 1:
-			base_type = GIMP_GRAY;
 			image_type = GIMP_GRAY_IMAGE;
 			layers_type = GIMP_GRAY_IMAGE;
 			break;
@@ -287,47 +319,8 @@ ReadQWI (const gchar  *name,
 			goto out;
 		}
 
-		lowres = 0;
 		width = element.width;
 		height = element.height;
-
-		if (!elements){
-			if ((element.width < 0) || (element.width > GIMP_MAX_IMAGE_SIZE))
-			{
-				g_message ("Unsupported or invalid image width: %d", element.width);
-				image_ID = -1;
-				goto out;
-			}
-
-			if ((element.height < 0) || (element.height > GIMP_MAX_IMAGE_SIZE))
-			{
-				g_message ("Unsupported or invalid image height: %d", element.height);
-				image_ID = -1;
-				goto out;
-			}
-			if (image_width)
-				*image_width = element.width;
-			if (image_height)
-				*image_height = element.height;
-			while (thumb && lowres < element.toplayer && (CEIL_RSHIFT(element.width, lowres) > thumb || CEIL_RSHIFT(element.height, lowres) > thumb))
-				lowres++;
-			width = CEIL_RSHIFT(element.width, lowres);
-			height = CEIL_RSHIFT(element.height, lowres);
-			image_ID = gimp_image_new (width, height, base_type);
-			gimp_image_set_filename (image_ID, filename);
-
-      if (code_length) {
-        if (code_parasite)
-          gimp_parasite_free (code_parasite);
-
-        code_parasite = gimp_parasite_new ("code", GIMP_PARASITE_PERSISTENT, code_length + 1, code);
-        g_free(code);
-        gimp_image_attach_parasite (image_ID, code_parasite);
-
-        gimp_parasite_free (code_parasite);
-        code_parasite = NULL;
-      }
-		}
 
 		// get layer name
 		if (elements) {
