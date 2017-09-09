@@ -168,7 +168,7 @@ WriteQWI (const gchar  *filename,
 	QWISaveData.subsampling = QWISaveData.subsampling < 0 ? 0 : QWISaveData.subsampling > 4 ? 0 : QWISaveData.subsampling;
 	QWISaveData.subsampling = planes < 3 ? 1 : QWISaveData.subsampling;
 	QWISaveData.animate = QWISaveData.elements > 1 ? (QWISaveData.animate ? 1 : 0) : 0;
-	QWISaveData.duration = QWISaveData.animate ? get_duration(set_duration(QWISaveData.duration)) : 1;
+	QWISaveData.duration = QWISaveData.animate ? get_duration(set_duration(QWISaveData.duration)) : 0;
 
 	gimp_set_data (SAVE_PROC, &QWISaveData, sizeof (QWISaveData));
 
@@ -201,6 +201,8 @@ WriteQWI (const gchar  *filename,
 	max_progress = elements;
 
 	element.file.type     = (elements > 1) + QWISaveData.animate;
+	element.file.width    = gimp_image_width(image);
+	element.file.height   = gimp_image_height(image);
 
 	// reserve some bytes for file header
 	fseek(outfile, QWI_FILE_HEADER_SIZE, SEEK_SET);
@@ -283,7 +285,7 @@ WriteQWI (const gchar  *filename,
 
 		//set the description element structure
 		qwi_setElement(&element, width, height, x, y, planes, QWISaveData.subsampling-1, colorspace, 8,
-				QWISaveData.quality, -1, QWISaveData.toplayer-1, 0, QWISaveData.resiliency, QWISaveData.duration);
+				QWISaveData.quality, -1, QWISaveData.toplayer-1, 0, QWISaveData.resiliency, set_duration(QWISaveData.duration));
 
 		//set the layer optionals (here, the layer name)
 		layername = gimp_item_get_name (layers[elements-1]);
@@ -334,6 +336,7 @@ WriteQWI (const gchar  *filename,
 		}
 		// Write data to disk
 		Write (outfile, buffer, length);
+    element.file.top = MAX(element.file.top, element.toplayer);
 
 		g_free (data[0]);
 		g_free (buffer);
@@ -511,7 +514,7 @@ save_dialog (gint channels)
 				GTK_FILL, GTK_FILL, 0, 0);
 		gtk_widget_show (label);
 
-		adjustment = (GtkAdjustment*)gtk_adjustment_new(get_duration(QWISaveData.duration), 1.0, 163840.0, 1.0, 10.0, 0.0);
+		adjustment = (GtkAdjustment*)gtk_adjustment_new(QWISaveData.duration, 1.0, 163830.0, 1.0, 10.0, 0.0);
 		pg.duration = spin = gtk_spin_button_new (adjustment, 1.0, 0);
 		//		  gtk_spin_button_set_value (spin, QWISaveData.duration);
 		gtk_table_attach (GTK_TABLE (table), spin, 1, 2, 0, 1,
@@ -643,7 +646,7 @@ save_dialog (gint channels)
 	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled_window),
 			GTK_POLICY_AUTOMATIC,
 			GTK_POLICY_AUTOMATIC);
-	gtk_widget_set_size_request (scrolled_window, 250, 50);
+	gtk_widget_set_size_request (scrolled_window, 250, 300);
 	gtk_container_add (GTK_CONTAINER (vbox), scrolled_window);
 	gtk_widget_show (scrolled_window);
 
